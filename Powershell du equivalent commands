@@ -1,0 +1,84 @@
+Load the function into the current session
+
+function directory-summary($dir=".") { 
+  get-childitem $dir | 
+    % { $f = $_ ; 
+        get-childitem -r $_.FullName | 
+           measure-object -property length -sum | 
+             select @{Name="Name";Expression={$f}},Sum}
+}
+
+Run the function and sort the output
+
+directory-summary | sort sum
+
+Name                                                                                                                Sum
+----                                                                                                                ---
+Export                                                                                                         51847550
+GROUP_3.RDO                                                                                                   157287936
+GROUP_2.RDO                                                                                                   157287936
+COREPRD                                                                                                       367005184
+cm9                                                                                                           390483456
+GISTEST_S1                                                                                                    397847040
+TRIMDEV_S1                                                                                                   1125626368
+COREPRD_S1                                                                                                   5379633664
+
+
+
+A better version, which is also much quicker
+
+Function Get-DU
+{   Param (
+        $Path = "."
+    )
+    ForEach ($File in (Get-ChildItem $Path))
+    {   If ($File.PSisContainer)
+        {   $Size = [Math]::Round((Get-ChildItem $File.FullName -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB,2)
+            $Type = "Folder"
+        }
+        Else
+        {   $Size = [Math]::Round($File.Length / 1MB,2)
+            $Type = ""
+        }
+        [PSCustomObject]@{
+            Name = $File.Name
+            Type = $Type
+            Size_M = $Size
+        }
+    }
+}
+
+Get-DU | sort Size_M
+
+Name                                    Type                                                                     Size_M
+----                                    ----                                                                     ------
+Export                                  Folder                                                                    49.45
+GROUP_2.RDO                                                                                                          50
+GROUP_3.RDO                                                                                                          50
+PENTST                                  Folder                                                                       59
+COREPRD                                 Folder                                                                      350
+cm9                                     Folder                                                                   372.39
+GISTEST_S1                              Folder                                                                   379.42
+TRIMDEV_S1                              Folder                                                                  1073.48
+
+
+
+To get a details breakdown of each subdirectory
+
+function Get-DiskUsage ([string]$path=".") {
+    $groupedList = Get-ChildItem -Recurse -File $path | Group-Object directoryName | select name,@{name='length'; expression={($_.group | Measure-Object -sum length).sum } }
+    foreach ($dn in $groupedList) {
+        New-Object psobject -Property @{ directoryName=$dn.name; length=($groupedList | where { $_.name -like "$($dn.name)*" } | Measure-Object -Sum length).sum }
+    }
+}
+
+directoryName                                                                                                    length
+-------------                                                                                                    ------
+F:\GISDATA_S1\ARCHIVELOG\2018_07_05                                                                          7840072192
+F:\GISDATA_S1\ARCHIVELOG\2018_07_06                                                                          1427202560
+F:\GISDATA_S1\CONTROLFILE                                                                                      48709632
+F:\GISDATA_S1\FLASHBACK                                                                                     42902380544
+F:\GISDATA_S1\ONLINELOG                                                                                       367005184
+
+
+
